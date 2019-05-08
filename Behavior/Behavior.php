@@ -1,20 +1,48 @@
 <?php
+/**
+ * OriginPHP Framework
+ * Copyright 2018 - 2019 Jamiel Sharief.
+ *
+ * Licensed under The MIT License
+ * The above copyright notice and this permission notice shall be included in all copies or substantial
+ * portions of the Software.
+ *
+ * @copyright   Copyright (c) Jamiel Sharief
+ * @link        https://www.originphp.com
+ * @license     https://opensource.org/licenses/mit-license.php MIT License
+ */
 
-namespace App\Model;
+namespace Origin\Model\Behavior;
 
 use Origin\Model\Model;
 use Origin\Model\Entity;
+use Origin\Core\ConfigTrait;
 
-class AppModel extends Model
+class Behavior
 {
+    use ConfigTrait;
+    
+    /**
+     * Model for this behavior
+     *
+     * @var \Origin\Model\Model
+     */
+    protected $_model = null;
+
+    public function __construct(Model $model, array $config = [])
+    {
+        $this->_model = $model;
+
+        $this->config($config);
+        $this->initialize($config);
+    }
+
     public function initialize(array $config)
     {
-        $this->loadBehavior('Timestamp');
     }
 
     /**
-     * Callback that is triggered just before the request data is marshalled, when calling
-     * model::new or model::patch and passing array
+     * Callback that is triggered just before the request data is marshalled.
      * This should return the requested data
      *
      * @param array $requestData
@@ -26,9 +54,9 @@ class AppModel extends Model
     }
 
     /**
-    * Before find callback. Must return either the query or true to continue
-    * @return array|bool query or bool
-    */
+      * Before find callback. Must return either the query or true to continue
+      * @return array|bool query or bool
+      */
     public function beforeFind(array $query = [])
     {
         return $query;
@@ -109,5 +137,14 @@ class AppModel extends Model
      */
     public function afterDelete(Entity $entity, bool $success)
     {
+    }
+    /**
+     * Returns the model
+     *
+     * @return \Origin\Model\Model
+     */
+    public function model()
+    {
+        return $this->_model;
     }
 }
