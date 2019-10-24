@@ -11,43 +11,56 @@
  * @link        https://www.originphp.com
  * @license     https://opensource.org/licenses/mit-license.php MIT License
  */
-declare(strict_types=1);
+declare(strict_types = 1);
+namespace Origin\Model\Concern;
 
-namespace Origin\Model\Behavior;
-
+use ArrayObject;
 use Origin\Model\Entity;
-use Origin\Utility\Inflector;
+use Origin\Inflector\Inflector;
 
 /**
  * In Book belongsTo Author set counterCache = true or fieldName
  */
-class CounterCacheBehavior extends Behavior
+trait CounterCacheable
 {
-    protected $belongsTo = null;
-    protected $fields = null;
+    private $counterCacheBelongsTo = null;
+    private $counterCacheFields = null;
+
+    /**
+     * Enables the counter cache on this model
+     *
+     * @return void
+     */
+    protected function enableCounterCache() : void
+    {
+        $this->afterSave('counterCacheAfterSave');
+        $this->afterDelete('counterCacheAfterDelete');
+    }
 
     /**
      * Get the data, if configuration is same then used cached
      *
      * @return array
      */
-    protected function getFields() : array
+    private function getFields() : array
     {
-        $belongsTo = $this->model()->association('belongsTo');
-        if ($this->belongsTo === $belongsTo) {
-            return $this->fields;
+        $belongsTo = $this->association('belongsTo');
+        // Check internal cache
+        if ($this->counterCacheBelongsTo === $belongsTo) {
+            return $this->counterCacheFields;
         }
-        $this->belongsTo = $belongsTo;
-        $this->fields = [];
+        // Process
+        $this->counterCacheBelongsTo = $belongsTo;
+        $this->counterCacheFields = [];
 
         foreach ($belongsTo as $alias => $config) {
             if (! empty($config['counterCache'])) {
                 $field = $config['counterCache'];
                 if ($field === true) {
-                    $name = Inflector::plural($this->model()->name);
+                    $name = Inflector::plural($this->name);
                     $field = Inflector::underscored($name) . '_count';
                 }
-                $this->fields[$alias] = [
+                $this->counterCacheFields[$alias] = [
                     'field' => $field,
                     'foreignKey' => $config['foreignKey'],
                     'name' => Inflector::underscored($alias),
@@ -55,26 +68,24 @@ class CounterCacheBehavior extends Behavior
             }
         }
 
-        return $this->fields;
+        return $this->counterCacheFields;
     }
 
     /**
      * After save callback
      *
      * @param \Origin\Model\Entity $entity
-     * @param boolean $created if this is a new record
-     * @param array $options these were the options passed to save
+     * @param ArrayObject $options
      * @return void
      */
-    public function afterSave(Entity $entity, bool $created, array $options = [])
+    protected function counterCacheAfterSave(Entity $entity, ArrayObject $options) : void
     {
         $items = $this->getFields();
         
         foreach ($items as $alias => $config) {
-            $model = $this->model()->{$alias};
-            if ($model->hasField($config['field'])) {
+            if ($this->$alias->hasField($config['field'])) {
                 $id = $entity->get($config['foreignKey']);
-                $model->increment($config['field'], $id);
+                $this->$alias->increment($config['field'], $id);
             }
         }
     }
@@ -83,17 +94,16 @@ class CounterCacheBehavior extends Behavior
      * After delete
      *
      * @param \Origin\Model\Entity $entity
-     * @param boolean $sucess wether or not it deleted the record
-     * @return bool
+     * @param ArrayObject $options
+     * @return void
      */
-    public function afterDelete(Entity $entity, bool $success)
+    protected function counterCacheAfterDelete(Entity $entity, ArrayObject $options) : void
     {
         $items = $this->getFields();
         foreach ($items as $alias => $config) {
-            $model = $this->model()->{$alias};
-            if ($model->hasField($config['field'])) {
+            if ($this->$alias->hasField($config['field'])) {
                 $id = $entity->get($config['foreignKey']);
-                $model->decrement($config['field'], $id);
+                $this->$alias->decrement($config['field'], $id);
             }
         }
     }

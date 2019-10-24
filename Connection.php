@@ -1,4 +1,5 @@
 <?php
+declare(strict_types = 1);
 /**
  * OriginPHP Framework
  * Copyright 2018 - 2019 Jamiel Sharief.
@@ -18,15 +19,16 @@ use PDO;
 use PDOException;
 use PDOStatement;
 use Origin\Log\Log;
-use Origin\Cache\Cache;
+use Origin\Core\Cache;
 use Origin\Core\Config;
+use Origin\Model\Schema\BaseSchema;
 use Origin\Model\Exception\ConnectionException;
 use Origin\Model\Exception\DatasourceException;
 
 /**
  * This is the connection class.
  */
-abstract class Datasource
+abstract class Connection
 {
     /**
      * The datasource name e.g mysql or pgsql
@@ -37,7 +39,7 @@ abstract class Datasource
     /**
      * Holds the connection to datasource.
      *
-     * @var resource
+     * @var \PDO
      */
     protected $connection = null;
 
@@ -51,7 +53,7 @@ abstract class Datasource
      *
      * @var string
      */
-    public $virtualFieldSeperator = '__';
+    protected $virtualFieldSeperator = '__';
 
     /**
      * Transaction Log.
@@ -93,6 +95,8 @@ abstract class Datasource
      * @var bool
      */
     protected $transactionStarted = false;
+
+    protected $quote = '`';
 
     /**
      * Constructor
@@ -158,23 +162,19 @@ abstract class Datasource
     /**
      * Gets the database that its connected to
      *
-     * @return void
+     * @return string
      */
     public function database() : ?string
     {
-        if (isset($this->config['database'])) {
-            return $this->config['database'];
-        }
-
-        return null;
+        return $this->config['database'] ?? null;
     }
 
     /**
      * Executes a sql query.
      *
      * @param string $sql SQL statement
-     * @param array  $params ['name'=>'John'] or ['p1'=>'John']
-     * @return bool result
+     * @param array $params ['name'=>'John'] or ['p1'=>'John']
+     * @return bool
      */
     public function execute(string $sql, array $params = []) :bool
     {
@@ -387,7 +387,7 @@ abstract class Datasource
      * cause meta for table does not return alias.
      *
      * @param string $type (num | assoc | model | object)
-     * @return array row
+     * @return array|bool row
      */
     protected function fetchResult(string $type = 'assoc')
     {
@@ -416,7 +416,6 @@ abstract class Datasource
      * 3 different list types ['a','b','c'] or ['a'=>'b'] or ['c'=>['a'=>'b']] depending upon how many columns are selected. If more than 3 columns selected it returns ['a'=>'b'].
      *
      * @param array $rows fetchAll rows
-     * @param array $rows
      * @return array
      */
     protected function toList(array $rows) : array
@@ -507,7 +506,7 @@ abstract class Datasource
     * does not work on postgresql. This will only work if all fields are quoted.
     *
     * @param array $records numerically index
-    * @param array fields
+    * @param array $fields
     * @return array
     */
     public function mapNumericResults(array $records, array $fields) : array
@@ -573,33 +572,14 @@ abstract class Datasource
      *
      * @return \Origin\Model\Schema\BaseSchema
      */
-    public function adapter()
+    public function adapter() : BaseSchema
     {
-        if (! $this->adapter) {
+        if ($this->adapter === null) {
             $adapterClass = __NAMESPACE__ . '\Schema\\'. ucfirst($this->name) . 'Schema';
-            $this->adapter = new $adapterClass($this->config['datasource']);
+            $this->adapter = new $adapterClass($this->config['connection']);
         }
       
         return $this->adapter;
-    }
-
-    /**
-     * Gets the schema for a table
-     * @deprecated This is kept for backwards compatability but it no longer going to be used in future
-     * @param string $table
-     * @return array
-     */
-    public function schema(string $table) : array
-    {
-        $cache = Cache::store('origin_model');
-        $key = $this->config['name'] . '_' . $table;
-        $schema = $cache->read($key);
-        if (! $schema) {
-            $schema = $this->adapter()->schema($table);
-            $cache->write($key, $schema);
-        }
-
-        return $schema;
     }
 
     /**
@@ -610,12 +590,14 @@ abstract class Datasource
      */
     public function describe(string $table) : array
     {
-        $cache = Cache::store('origin_model');
         $key = $this->config['name'] . '_' . $table;
-        $schema = $cache->read($key);
+        $schema = defined('PHPUNIT') ? null : Cache::get($key);
+
         if (! $schema) {
             $schema = $this->adapter()->describe($table);
-            $cache->write($key, $schema);
+            if (! defined('PHPUNIT')) {
+                Cache::set($key, $schema, ['serialize' => false,'duration' => 60 * 5]);
+            }
         }
 
         return $schema;
@@ -667,9 +649,9 @@ abstract class Datasource
      *
      * @param string $table
      * @param array $options
-     * @return void
+     * @return bool
      */
-    public function select(string $table, array $options)
+    public function select(string $table, array $options) : bool
     {
         $builder = $this->queryBuilder($table, $options['alias']);
         $sql = $builder->selectStatement($options);// How to handle this elegently without having to do same work as selct

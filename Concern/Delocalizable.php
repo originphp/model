@@ -11,45 +11,35 @@
  * @link        https://www.originphp.com
  * @license     https://opensource.org/licenses/mit-license.php MIT License
  */
-
- /**
-  * Delocalize Behavior - In the before validate, data will be parsed to local. This is important because validation
-  * is going to check raw data e.g. 123456.78. If validation fails, when it reaches the form helper, if the data is valid
-  * it will format it back, if not it will leave as is.
-  */
-namespace Origin\Model\Behavior;
+declare(strict_types = 1);
+namespace Origin\Model\Concern;
 
 use Origin\Model\Entity;
 use Origin\Utility\Date;
 use Origin\Utility\Number;
 
-class DelocalizeBehavior extends Behavior
+trait Delocalizable
 {
-    protected $schema = null;
-
     /**
-     * Before Validate, we de localize user intput
+     * Initialization method, here you can register callbacks or configure model associations
      *
-     * @param \Origin\Model\Entity $entity
-     * @param array $options
-     * @return bool must return true to continue
+     * @return void
      */
-    public function beforeValidate(Entity $entity)
+    protected function initializeDelocalizable() : void
     {
-        $this->delocalize($entity);
-
-        return true;
+        $this->beforeValidate('delocalize');
     }
 
     /**
-     * Delocalize the values in the entity
-     *
-     * @param \Origin\Model\Entity $entity
-     * @return \Origin\Model\Entity
-     */
-    public function delocalize(Entity $entity) : Entity
+    * Delocalize the values in the entity
+    * This is a beforeValidate callback, so it must return true;
+    *
+    * @param \Origin\Model\Entity $entity
+    * @return bool
+    */
+    public function delocalize(Entity $entity) : bool
     {
-        $columns = $this->model()->schema()['columns'];
+        $columns = $this->schema()['columns'];
         foreach ($entity->modified() as $field) {
             $value = $entity->get($field);
             if ($value and isset($columns[$field])) {
@@ -63,17 +53,17 @@ class DelocalizeBehavior extends Behavior
             }
         }
 
-        return $entity;
+        return true;
     }
 
     /**
-     * Process value
+     * Parses values
      *
      * @param string $type
      * @param string $value
      * @return mixed
      */
-    protected function processField(string $type, $value)
+    private function processField(string $type, $value)
     {
         if ($type === 'date') {
             return Date::parseDate($value);

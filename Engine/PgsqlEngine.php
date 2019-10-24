@@ -1,4 +1,5 @@
 <?php
+declare(strict_types = 1);
 /**
  * OriginPHP Framework
  * Copyright 2018 - 2019 Jamiel Sharief.
@@ -13,9 +14,9 @@
  */
 namespace Origin\Model\Engine;
 
-use Origin\Model\Datasource;
+use Origin\Model\Connection;
 
-class PostgreSQLEngine extends Datasource
+class PgsqlEngine extends Connection
 {
     protected $name = 'pgsql';
 
